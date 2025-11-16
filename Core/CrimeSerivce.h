@@ -1,48 +1,39 @@
-#pragma once
+#ifndef CRIME_SERVICE_H
+#define CRIME_SERVICE_H
+
+#include "Models.h"
+#include "HashMap.h"
+#include "AVLTree.h"
 #include <string>
 #include <vector>
-#include "CrimeKey.h"
-#include "CrimeReport.h"
-#include "Officer.h"
-#include "Area.h"
-#include "Road.h"
-#include "Graph.h"
-#include "AVLTree.h"
-#include "Queue.h"
+using namespace std;
 
-class CrimeService{
+class CrimeService {
+    HashMap<string, CrimeReport> crimes_;
+    HashMap<string, Officer> officers_;
+    AVLTree<long long, string> crimeIndex_;   // epoch → crimeID (for sorting by time)
+
 public:
-    // ----- Data Loading / Setup -----
-    bool addArea(const Area& a);
-    bool addRoad(const Road& r);
-    bool addOfficer(const Officer& o);
+    CrimeService();
 
-    // ----- Crime Operations -----
-    bool addCrime(const CrimeReport& c);
-    const CrimeReport* getCrime(const std::string& id) const;
+    // Crime operations
+    bool addCrime(const CrimeReport& report);
+    CrimeReport* findCrime(const string& crimeId);
+    bool updateCrime(const string& crimeId, const CrimeReport& updated);
+    bool deleteCrime(const string& crimeId);
 
-    // ----- Assignment & Stages -----
-    bool assignOfficer(const std::string& crimeId,const std::string& officerId);
-    bool advanceStage(const std::string& crimeId,CaseStage nextStage);
+    // Officer operations
+    bool addOfficer(const Officer& officer);
+    Officer* findOfficer(const string& officerId);
+    bool updateOfficer(const string& officerId, const Officer& updated);
+    bool deleteOfficer(const string& officerId);
 
-    // ----- Queries -----
-    std::vector<CrimeReport> rangeCrimes(long long fromEpoch,long long toEpoch) const;
-    std::vector<std::string> activeQueuePeek(size_t k=20) const;
+    // Assignment
+    bool assignOfficer(const string& crimeId, const string& officerId);
 
-    // ----- Routing -----
-    std::vector<std::string> shortestRoute(const std::string& areaFrom,const std::string& areaTo,double& totalDist) const;
-
-private:
-    // main storage
-    HashMap<std::string,CrimeReport> crimes_;
-    HashMap<std::string,Officer> officers_;
-
-    // AVL ordered index by time/severity
-    AVLTree<CrimeKey,std::string> crimesByTime_;
-
-    // city graph
-    Graph city_;
-
-    // active processing queue
-    Queue<std::string> activeQueue_;
+    // AVL-based queries
+    vector<string> getCrimesInTimeRange(long long startEpoch, long long endEpoch);
+    vector<string> getRecentCrimes(int k);
 };
+
+#endif

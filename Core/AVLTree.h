@@ -82,6 +82,32 @@ public:
         root = insertNode(root, key, value);
     }
 
+    // ---------- REMOVE SINGLE VALUE (remove only this value from node->values) ----------
+bool removeValue(const Key &key, const Value &value){
+    // find node (iterative)
+    AVLNode<Key,Value>* cur = root;
+    while(cur){
+        if(key < cur->key) cur = cur->left;
+        else if(key > cur->key) cur = cur->right;
+        else break;
+    }
+    if(!cur) return false;
+
+    // find value inside values vector
+    auto it = std::find(cur->values.begin(), cur->values.end(), value);
+    if(it == cur->values.end()) return false;
+
+    cur->values.erase(it);
+
+    // if still has other values, keep node
+    if(!cur->values.empty()) return true;
+
+    // otherwise remove the whole node (key), using existing removeNode
+    root = removeNode(root, key);
+    return true;
+}
+
+
     // ---------- MIN NODE (for deletion) ----------
     AVLNode<Key,Value>* minNode(AVLNode<Key,Value>* node){
         while(node->left) node = node->left;

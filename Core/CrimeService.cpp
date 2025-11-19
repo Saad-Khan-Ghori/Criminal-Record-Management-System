@@ -1,13 +1,33 @@
 #include "CrimeService.h"
+#include <algorithm>
 using namespace std;
 
 CrimeService::CrimeService(){}
 
-// ----------------------------- CRIME OPS ------------------------------
+// ----------------------------- AREA OPS ------------------------------
+bool CrimeService::addArea(const Area& area){
+    return areas_.insert(area.id, area);
+}
 
+Area* CrimeService::findArea(const string& areaId){
+    return areas_.find(areaId);
+}
+
+// ----------------------------- ROAD OPS ------------------------------
+bool CrimeService::addRoad(const Road& road){
+    cityGraph_.addRoad(road.from, road.to, road.distKm, road.blocked);
+    return true;
+}
+
+// ----------------------------- CRIME OPS ------------------------------
 bool CrimeService::addCrime(const CrimeReport& report){
-    if(!crimes_.insert(report.id, report)) return false; // duplicate ID -> fail
-    crimeIndex_.insert(report.epoch, report.id);
+    if(!crimes_.insert(report.id, report)) 
+        return false; // duplicate ID
+    
+    // Add to AVL index with proper CrimeKey
+    CrimeKey key{report.epoch, report.severity};
+    crimeIndex_.insert(key, report.id);
+    
     return true;
 }
 
@@ -19,28 +39,32 @@ bool CrimeService::updateCrime(const string& crimeId, const CrimeReport& updated
     CrimeReport* old = crimes_.find(crimeId);
     if(!old) return false;
 
-    // If epoch changed, remove only this crimeId from its old key, then insert new
-    if(updated.epoch != old->epoch){
-        crimeIndex_.removeValue(old->epoch, old->id); // <-- use new removeValue
-        crimeIndex_.insert(updated.epoch, updated.id);
-    }
+    // Remove from AVL index with old key
+    CrimeKey oldKey{old->epoch, old->severity};
+    crimeIndex_.removeValue(oldKey, crimeId);
 
+    // Update crime data
     *old = updated;
+
+    // Re-insert with new key
+    CrimeKey newKey{updated.epoch, updated.severity};
+    crimeIndex_.insert(newKey, crimeId);
+
     return true;
 }
 
 bool CrimeService::deleteCrime(const string& crimeId){
-    CrimeReport* old = crimes_.find(crimeId);
-    if(!old) return false;
+    CrimeReport* crime = crimes_.find(crimeId);
+    if(!crime) return false;
 
-    // remove only this id from AVL index
-    crimeIndex_.removeValue(old->epoch, old->id);
+    // Remove from AVL index
+    CrimeKey key{crime->epoch, crime->severity};
+    crimeIndex_.removeValue(key, crimeId);
 
     return crimes_.erase(crimeId);
 }
 
 // ----------------------------- OFFICER OPS ------------------------------
-
 bool CrimeService::addOfficer(const Officer& officer){
     return officers_.insert(officer.id, officer);
 }
@@ -61,38 +85,77 @@ bool CrimeService::deleteOfficer(const string& officerId){
 }
 
 // ----------------------------- ASSIGNMENT ------------------------------
-
 bool CrimeService::assignOfficer(const string& crimeId, const string& officerId){
-    CrimeReport* cr = crimes_.find(crimeId);
-    Officer* of = officers_.find(officerId);
+    CrimeReport* crime = crimes_.find(crimeId);
+    Officer* officer = officers_.find(officerId);
 
-    if(!cr || !of) return false;
-    if(of->curLoad >= of->maxLoad) return false;
-    if(cr->officerId == officerId) return true;
-
-    if(cr->officerId != ""){
-        Officer* prev = officers_.find(cr->officerId);
-        if(prev) prev->curLoad--;
+    if(!crime || !officer) return false;
+    
+    // Check officer capacity
+    if(officer->curLoad >= officer->maxLoad) return false;
+    
+    // If crime already assigned to another officer, decrease their load
+    if(!crime->officerId.empty()){
+        Officer* prevOfficer = officers_.find(crime->officerId);
+        if(prevOfficer) prevOfficer->curLoad--;
     }
+    
+    // Assign new officer
+    crime->officerId = officerId;
+    officer->curLoad++;
+    crime->stage = CaseStage::Assigned;
+    
+    return true;
+}
 
-    cr->officerId = officerId;
-    of->curLoad++;
+bool CrimeService::advanceCrimeStage(const string& crimeId, CaseStage newStage){
+    CrimeReport* crime = crimes_.find(crimeId);
+    if(!crime) return false;
+    
+    crime->stage = newStage;
     return true;
 }
 
 // ----------------------------- AVL QUERIES ------------------------------
-
 vector<string> CrimeService::getCrimesInTimeRange(long long startEpoch, long long endEpoch){
-    // AVLTree::rangeQuery returns vector<Value>
-    vector<string> result = crimeIndex_.rangeQuery(startEpoch, endEpoch);
+    CrimeKey lowKey{startEpoch, 5};   // Max severity for lower bound
+    CrimeKey highKey{endEpoch, 1};    // Min severity for upper bound
+    
+    auto crimeIds = crimeIndex_.rangeQuery(lowKey, highKey);
+    
+    // Filter to ensure we only get crimes in the exact time range
+    vector<string> result;
+    for(const auto& crimeId : crimeIds){
+        CrimeReport* crime = findCrime(crimeId);
+        if(crime && crime->epoch >= startEpoch && crime->epoch <= endEpoch){
+            result.push_back(crimeId);
+        }
+    }
+    
     return result;
 }
 
 vector<string> CrimeService::getRecentCrimes(int k){
-    auto latest = crimeIndex_.getLastK(k); // returns vector<pair<long long,string>>
-    vector<string> out;
-    out.reserve(latest.size());
-    for(auto &p : latest) out.push_back(p.second);
-    return out;
+    auto latest = crimeIndex_.getLastK(k);
+    vector<string> result;
+    for(auto &pair : result) 
+        result.push_back(pair.second);
+    return result;
 }
 
+vector<string> CrimeService::getHighSeverityCrimes(int minSeverity){
+    // This would need additional indexing by severity
+    // For now, we'll return empty - you can implement with another AVL tree
+    return vector<string>();
+}
+
+// ----------------------------- GRAPH OPERATIONS ------------------------------
+vector<string> CrimeService::shortestRoute(const string& fromArea, const string& toArea, double& totalDist){
+    vector<string> path;
+    bool found = cityGraph_.shortestPath(fromArea, toArea, path, totalDist);
+    return found ? path : vector<string>();
+}
+
+vector<string> CrimeService::getNearbyAreas(const string& areaId, int maxHops){
+    return cityGraph_.kHopNeighborhood(areaId, maxHops);
+}

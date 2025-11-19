@@ -1,15 +1,84 @@
 #pragma once
 #include <algorithm>
 #include <vector>
+#include <functional>
 #include "AVLNode.h"
 using namespace std;
 
 template<typename Key, typename Value>
 class AVLTree{
+private:
+    // ---------- MIN NODE (for deletion) ----------
+    AVLNode<Key,Value>* minNode(AVLNode<Key,Value>* node){
+        while(node && node->left) node = node->left;
+        return node;
+    }
+
+    // ---------- REMOVE NODE BY KEY (private) ----------
+    AVLNode<Key,Value>* removeNode(AVLNode<Key,Value>* node, const Key &key){
+        if(!node) return nullptr;
+
+        if(key < node->key)
+            node->left = removeNode(node->left, key);
+        else if(key > node->key)
+            node->right = removeNode(node->right, key);
+        else{
+            // Node found - handle deletion
+            if(!node->left || !node->right){
+                AVLNode<Key,Value>* temp = node->left ? node->left : node->right;
+                if(!temp){
+                    // No children
+                    delete node;
+                    return nullptr;
+                } else {
+                    // One child
+                    *node = *temp; // Copy contents
+                    delete temp;
+                }
+            } else {
+                // Two children
+                AVLNode<Key,Value>* temp = minNode(node->right);
+                node->key = temp->key;
+                node->values = temp->values;
+                node->right = removeNode(node->right, temp->key);
+            }
+        }
+
+        if(!node) return nullptr;
+
+        // Update height and balance
+        node->height = 1 + max(height(node->left), height(node->right));
+        int bal = getBalance(node);
+
+        // Perform rotations if needed
+        if(bal > 1 && getBalance(node->left) >= 0) 
+            return rightRotate(node);
+        if(bal > 1 && getBalance(node->left) < 0){
+            node->left = leftRotate(node->left);
+            return rightRotate(node);
+        }
+        if(bal < -1 && getBalance(node->right) <= 0) 
+            return leftRotate(node);
+        if(bal < -1 && getBalance(node->right) > 0){
+            node->right = rightRotate(node->right);
+            return leftRotate(node);
+        }
+        return node;
+    }
+
 public:
     AVLNode<Key,Value>* root;
 
     AVLTree(){ root = nullptr; }
+    ~AVLTree(){ clear(root); }
+    
+    void clear(AVLNode<Key,Value>* node){
+        if(node){
+            clear(node->left);
+            clear(node->right);
+            delete node;
+        }
+    }
 
     // ---------- HEIGHT ----------
     int height(AVLNode<Key,Value>* n){
@@ -55,6 +124,7 @@ public:
         else if(key > node->key) 
             node->right = insertNode(node->right, key, value);
         else{ 
+            // Key exists - add value to existing node
             node->values.push_back(value);
             return node;
         }
@@ -62,14 +132,21 @@ public:
         node->height = 1 + max(height(node->left), height(node->right));
         int bal = getBalance(node);
 
-        if(bal > 1 && key < node->left->key) return rightRotate(node);
-        if(bal < -1 && key > node->right->key) return leftRotate(node);
-
+        // Left Left Case
+        if(bal > 1 && key < node->left->key) 
+            return rightRotate(node);
+        
+        // Right Right Case  
+        if(bal < -1 && key > node->right->key) 
+            return leftRotate(node);
+        
+        // Left Right Case
         if(bal > 1 && key > node->left->key){
             node->left = leftRotate(node->left);
             return rightRotate(node);
         }
-
+        
+        // Right Left Case
         if(bal < -1 && key < node->right->key){
             node->right = rightRotate(node->right);
             return leftRotate(node);
@@ -82,83 +159,41 @@ public:
         root = insertNode(root, key, value);
     }
 
-    // ---------- REMOVE SINGLE VALUE (remove only this value from node->values) ----------
-bool removeValue(const Key &key, const Value &value){
-    // find node (iterative)
-    AVLNode<Key,Value>* cur = root;
-    while(cur){
-        if(key < cur->key) cur = cur->left;
-        else if(key > cur->key) cur = cur->right;
-        else break;
-    }
-    if(!cur) return false;
-
-    // find value inside values vector
-    auto it = std::find(cur->values.begin(), cur->values.end(), value);
-    if(it == cur->values.end()) return false;
-
-    cur->values.erase(it);
-
-    // if still has other values, keep node
-    if(!cur->values.empty()) return true;
-
-    // otherwise remove the whole node (key), using existing removeNode
-    root = removeNode(root, key);
-    return true;
-}
-
-
-    // ---------- MIN NODE (for deletion) ----------
-    AVLNode<Key,Value>* minNode(AVLNode<Key,Value>* node){
-        while(node->left) node = node->left;
-        return node;
-    }
-
-    // ---------- REMOVE ----------
-    AVLNode<Key,Value>* removeNode(AVLNode<Key,Value>* node, const Key &key){
-        if(!node) return nullptr;
-
-        if(key < node->key)
-            node->left = removeNode(node->left, key);
-        else if(key > node->key)
-            node->right = removeNode(node->right, key);
-        else{
-            if(!node->left || !node->right){
-                AVLNode<Key,Value>* temp = node->left ? node->left : node->right;
-                if(!temp){
-                    temp = node;
-                    node = nullptr;
-                } else {
-                    *node = *temp;
-                }
-                delete temp;
-            }
-            else{
-                AVLNode<Key,Value>* temp = minNode(node->right);
-                node->key = temp->key;
-                node->values = temp->values;
-                node->right = removeNode(node->right, temp->key);
+    // ---------- REMOVE SINGLE VALUE ----------
+    bool removeValue(const Key &key, const Value &value){
+        // Find the node first
+        AVLNode<Key,Value>* current = root;
+        AVLNode<Key,Value>* parent = nullptr;
+        
+        while(current){
+            if(key < current->key){
+                parent = current;
+                current = current->left;
+            } else if(key > current->key){
+                parent = current;
+                current = current->right;
+            } else {
+                break; // Found node
             }
         }
+        
+        if(!current) return false; // Node not found
 
-        if(!node) return nullptr;
-
-        node->height = 1 + max(height(node->left), height(node->right));
-        int bal = getBalance(node);
-
-        if(bal > 1 && getBalance(node->left) >= 0) return rightRotate(node);
-        if(bal > 1 && getBalance(node->left) < 0){
-            node->left = leftRotate(node->left);
-            return rightRotate(node);
-        }
-        if(bal < -1 && getBalance(node->right) <= 0) return leftRotate(node);
-        if(bal < -1 && getBalance(node->right) > 0){
-            node->right = rightRotate(node->right);
-            return leftRotate(node);
-        }
-        return node;
+        // Remove the specific value from node's values
+        auto it = find(current->values.begin(), current->values.end(), value);
+        if(it == current->values.end()) return false; // Value not found
+        
+        current->values.erase(it);
+        
+        // If node still has values, we're done
+        if(!current->values.empty()) return true;
+        
+        // Node is empty - remove entire node
+        root = removeNode(root, key);
+        return true;
     }
 
+    // ---------- REMOVE ENTIRE NODE ----------
     bool remove(const Key &key){
         if(!root) return false;
         root = removeNode(root, key);
@@ -169,12 +204,16 @@ bool removeValue(const Key &key, const Value &value){
     void rangeQueryHelper(AVLNode<Key,Value>* node, const Key &low, const Key &high, vector<Value> &out){
         if(!node) return;
 
-        if(low < node->key) rangeQueryHelper(node->left, low, high, out);
+        if(low < node->key) 
+            rangeQueryHelper(node->left, low, high, out);
+        
         if(node->key >= low && node->key <= high){
             for(const auto &v : node->values)
                 out.push_back(v);
         }
-        if(high > node->key) rangeQueryHelper(node->right, low, high, out);
+        
+        if(high > node->key) 
+            rangeQueryHelper(node->right, low, high, out);
     }
 
     vector<Value> rangeQuery(const Key &low, const Key &high){
@@ -203,5 +242,18 @@ bool removeValue(const Key &key, const Value &value){
         getLastKHelper(root, k, out);
         return out;
     }
+    
+    // ---------- SEARCH ----------
+    vector<Value>* find(const Key &key){
+        AVLNode<Key,Value>* current = root;
+        while(current){
+            if(key < current->key)
+                current = current->left;
+            else if(key > current->key)
+                current = current->right;
+            else
+                return &(current->values);
+        }
+        return nullptr;
+    }
 };
-

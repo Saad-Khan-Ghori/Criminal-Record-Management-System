@@ -6,7 +6,7 @@ CrimeService::CrimeService(){}
 // ----------------------------- CRIME OPS ------------------------------
 
 bool CrimeService::addCrime(const CrimeReport& report){
-    if(!crimes_.insert(report.id, report)) return false;
+    if(!crimes_.insert(report.id, report)) return false; // duplicate ID -> fail
     crimeIndex_.insert(report.epoch, report.id);
     return true;
 }
@@ -19,8 +19,9 @@ bool CrimeService::updateCrime(const string& crimeId, const CrimeReport& updated
     CrimeReport* old = crimes_.find(crimeId);
     if(!old) return false;
 
+    // If epoch changed, remove only this crimeId from its old key, then insert new
     if(updated.epoch != old->epoch){
-        crimeIndex_.remove(old->epoch);
+        crimeIndex_.removeValue(old->epoch, old->id); // <-- use new removeValue
         crimeIndex_.insert(updated.epoch, updated.id);
     }
 
@@ -32,7 +33,9 @@ bool CrimeService::deleteCrime(const string& crimeId){
     CrimeReport* old = crimes_.find(crimeId);
     if(!old) return false;
 
-    crimeIndex_.remove(old->epoch);
+    // remove only this id from AVL index
+    crimeIndex_.removeValue(old->epoch, old->id);
+
     return crimes_.erase(crimeId);
 }
 
@@ -80,17 +83,16 @@ bool CrimeService::assignOfficer(const string& crimeId, const string& officerId)
 // ----------------------------- AVL QUERIES ------------------------------
 
 vector<string> CrimeService::getCrimesInTimeRange(long long startEpoch, long long endEpoch){
-    vector<string> result;
-    crimeIndex_.rangeQuery(startEpoch, endEpoch, result);
+    // AVLTree::rangeQuery returns vector<Value>
+    vector<string> result = crimeIndex_.rangeQuery(startEpoch, endEpoch);
     return result;
 }
 
 vector<string> CrimeService::getRecentCrimes(int k){
-    vector<pair<long long,string>> latest;
-    crimeIndex_.getLastK(k, latest);
-
+    auto latest = crimeIndex_.getLastK(k); // returns vector<pair<long long,string>>
     vector<string> out;
     out.reserve(latest.size());
-    for(auto& p : latest) out.push_back(p.second);
+    for(auto &p : latest) out.push_back(p.second);
     return out;
 }
+

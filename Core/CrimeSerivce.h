@@ -9,35 +9,8 @@
 #include <vector>
 using namespace std;
 
-// CrimeKey for better sorting (time + severity)
-struct CrimeKey {
-    long long epoch;
-    int severity; // Positive - we'll handle comparison logic
-    
-    bool operator<(const CrimeKey& other) const {
-        if(epoch != other.epoch) 
-            return epoch < other.epoch;
-        return severity > other.severity; // Higher severity first for same time
-    }
-    
-    bool operator>(const CrimeKey& other) const {
-        return other < *this;
-    }
-    
-    bool operator==(const CrimeKey& other) const {
-        return epoch == other.epoch && severity == other.severity;
-    }
-    
-    bool operator<=(const CrimeKey& other) const {
-        return !(other < *this);
-    }
-    
-    bool operator>=(const CrimeKey& other) const {
-        return !(*this < other);
-    }
-};
-
 class CrimeService {
+private:
     HashMap<string, CrimeReport> crimes_;
     HashMap<string, Officer> officers_;
     HashMap<string, Area> areas_;
@@ -50,7 +23,7 @@ public:
     // Area operations
     bool addArea(const Area& area);
     Area* findArea(const string& areaId);
-    
+
     // Road operations  
     bool addRoad(const Road& road);
 
